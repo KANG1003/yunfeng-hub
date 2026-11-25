@@ -55,7 +55,10 @@ struct TerminalView: View {
         }
         .scrollIndicators(.hidden)
         .refreshable { await svc.refresh() }
-        .task { if svc.isConfigured { await svc.refresh() } }
+        .task {
+            if svc.isConfigured { await svc.refresh() }
+            await autoLoop()
+        }
         .sheet(isPresented: $showSettings) {
             settingsSheet
         }
@@ -106,9 +109,28 @@ struct TerminalView: View {
         case .ok:
             let time = svc.lastUpdate?.formatted(date: .omitted, time: .shortened) ?? ""
             let mode = svc.usedMode.isEmpty ? "" : " · \(svc.usedMode)"
-            return "在线 \(svc.terminals.count) · 离线 \(svc.offlineTerminals.count) · \(time)\(mode)"
+            let auto = svc.token.isEmpty ? "" : " · 5s 自动刷新"
+            return "在线 \(svc.terminals.count) · 离线 \(svc.offlineTerminals.count) · \(time)\(mode)\(auto)"
         case .failed: return "连接失败"
         case .idle: return "未连接"
+        }
+    }
+
+    // MARK: 自动刷新（5 秒一次，后台/弹窗时暂停）
+
+    private func autoLoop() async {
+        var tick = 0
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if Task.isCancelled { break }
+            guard svc.isConfigured, !svc.token.isEmpty else { continue }
+            guard UIApplication.shared.applicationState == .active else { continue }
+            guard detail == nil, !showSettings, !showLog else { continue }
+            if svc.status == .loading { continue }
+
+            tick += 1
+            await svc.refreshLive()
+            if tick % 6 == 0 { await svc.refreshOffline() }
         }
     }
 

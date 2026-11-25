@@ -170,6 +170,27 @@ final class IKuaiService {
         }
     }
 
+    /// 静默刷新：只更新在线列表和路由状态，不动离线表，也不改 status
+    func refreshLive() async {
+        guard !token.isEmpty else { return }
+        if let online = try? await fetchClients(offline: false) {
+            terminals = online.sorted { ipOrder($0.ip) < ipOrder($1.ip) }
+        }
+        if let s = try? await fetchSystem() { sys = s }
+        usedMode = "4.x API"
+        lastUpdate = .now
+        if log.count > 160 { log.removeFirst(log.count - 160) }
+    }
+
+    /// 静默刷新离线表（频率低一些，它不会几秒一变）
+    func refreshOffline() async {
+        guard !token.isEmpty else { return }
+        if let off = try? await fetchClients(offline: true) {
+            offlineTerminals = off.sorted { ipOrder($0.ip) < ipOrder($1.ip) }
+        }
+        if log.count > 160 { log.removeFirst(log.count - 160) }
+    }
+
     /// 诊断：两套协议都试一遍，把原始返回记到 log 里
     func diagnose() async {
         status = .loading
@@ -460,6 +481,7 @@ final class IKuaiService {
         let (data, resp) = try await InsecureSession.shared.session.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         log.append("\(label) → HTTP \(code)")
+        if log.count > 160 { log.removeFirst(log.count - 160) }
         return (code, data)
     }
 
