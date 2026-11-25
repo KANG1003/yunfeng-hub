@@ -94,62 +94,6 @@ enum WeeklyEngine {
     }
 }
 
-// MARK: - WireGuard 配置
-//
-// 本 App 不做隧道（iOS 建隧道必须 NetworkExtension + 付费开发者账号）。
-// 这里只负责：解析 .conf → 生成标准 .conf → 交给官方 WireGuard App 导入。
-
-enum WGConfig {
-
-    /// 生成可直接导入官方 WireGuard 的配置文件内容
-    static func render(_ p: WGProfile, keepalive: Int = 25) -> String {
-        var s = "[Interface]\n"
-        s += "PrivateKey = \(p.privateKey)\n"
-        s += "Address = \(p.address)\n"
-        if p.mtu > 0 { s += "MTU = \(p.mtu)\n" }
-        s += "\n[Peer]\n"
-        s += "PublicKey = \(p.publicKey)\n"
-        s += "Endpoint = \(p.endpoint)\n"
-        s += "AllowedIPs = \(p.allowedIPs)\n"
-        s += "PersistentKeepalive = \(keepalive)\n"
-        return s
-    }
-
-    /// 解析 .conf 文本
-    static func parse(_ text: String, name: String) -> WGProfile? {
-        var p = WGProfile(name: name, endpoint: "", address: "", allowedIPs: "")
-        var inInterface = false
-        for raw in text.split(separator: "\n") {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("[") {
-                inInterface = line.lowercased().contains("interface")
-                continue
-            }
-            let parts = line.split(separator: "=", maxSplits: 1).map {
-                $0.trimmingCharacters(in: .whitespaces)
-            }
-            guard parts.count == 2 else { continue }
-            let key = parts[0].lowercased(), val = parts[1]
-            switch key {
-            case "address" where inInterface: p.address = val
-            case "privatekey": p.privateKey = val
-            case "mtu": p.mtu = Int(val) ?? 1400
-            case "endpoint": p.endpoint = val
-            case "publickey": p.publicKey = val
-            case "allowedips": p.allowedIPs = val
-            default: break
-            }
-        }
-        return p.endpoint.isEmpty ? nil : p
-    }
-
-    /// 密钥脱敏显示
-    static func mask(_ key: String) -> String {
-        guard key.count > 12 else { return key.isEmpty ? "未配置" : key }
-        return String(key.prefix(6)) + "…" + String(key.suffix(4))
-    }
-}
-
 // MARK: - Sun-Panel
 
 @MainActor

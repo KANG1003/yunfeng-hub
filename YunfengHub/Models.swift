@@ -63,24 +63,6 @@ struct NavItem: Codable, Identifiable, Hashable {
     }
 }
 
-// MARK: - WireGuard 配置
-
-struct WGProfile: Codable, Identifiable, Hashable {
-    var id = UUID()
-    var name: String
-    var endpoint: String
-    var address: String
-    var allowedIPs: String
-    var mtu: Int = 1400
-    var privateKey: String = ""
-    var publicKey: String = ""
-
-    /// 有完整密钥才能导出给官方 App 导入
-    var isComplete: Bool {
-        !privateKey.isEmpty && !publicKey.isEmpty && !endpoint.isEmpty && !address.isEmpty
-    }
-}
-
 // MARK: - 全局 Store
 
 @MainActor
@@ -94,9 +76,6 @@ final class AppStore {
     var navItems: [NavItem] = []
     var sunPanelURL: String = "http://sp.kangkang.me"
 
-    var profiles: [WGProfile] = []
-    var activeProfileID: UUID?
-
     private let storeURL: URL = {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return dir.appendingPathComponent("yunfeng-hub.json")
@@ -106,7 +85,6 @@ final class AppStore {
         load()
         if tasks.isEmpty { tasks = Self.seedTasks }
         if navItems.isEmpty { navItems = Self.seedNav }
-        if profiles.isEmpty { profiles = Self.seedProfiles }
     }
 
     // MARK: 任务操作
@@ -152,24 +130,6 @@ final class AppStore {
         save()
     }
 
-    // MARK: WireGuard 配置
-
-    func addProfile(_ p: WGProfile) {
-        profiles.append(p)
-        save()
-    }
-
-    func deleteProfile(_ p: WGProfile) {
-        profiles.removeAll { $0.id == p.id }
-        save()
-    }
-
-    func updateProfile(_ p: WGProfile) {
-        guard let idx = profiles.firstIndex(where: { $0.id == p.id }) else { return }
-        profiles[idx] = p
-        save()
-    }
-
     // MARK: 持久化
 
     struct Snapshot: Codable {
@@ -178,12 +138,11 @@ final class AppStore {
         var template: ReportTemplate
         var navItems: [NavItem]
         var sunPanelURL: String
-        var profiles: [WGProfile]
     }
 
     func save() {
         let snap = Snapshot(tasks: tasks, entries: entries, template: template,
-                            navItems: navItems, sunPanelURL: sunPanelURL, profiles: profiles)
+                            navItems: navItems, sunPanelURL: sunPanelURL)
         do {
             let data = try JSONEncoder().encode(snap)
             try data.write(to: storeURL, options: .atomic)
@@ -200,7 +159,6 @@ final class AppStore {
         template = snap.template
         navItems = snap.navItems
         sunPanelURL = snap.sunPanelURL
-        profiles = snap.profiles
     }
 
     // MARK: 首次种子数据
@@ -232,12 +190,5 @@ final class AppStore {
                 lanURL: "http://192.168.10.252:5000", wanURL: ""),
         NavItem(name: "PVE", symbol: "server.rack",
                 lanURL: "https://192.168.10.240:8006", wanURL: ""),
-    ]
-
-    static let seedProfiles: [WGProfile] = [
-        WGProfile(name: "家 · 内网", endpoint: "wg.yunfeng.pro:51820",
-                  address: "10.8.0.2/32", allowedIPs: "192.168.10.0/24,10.8.0.0/24", mtu: 1400),
-        WGProfile(name: "公司 · 跳板", endpoint: "wg2.yunfeng.pro:51820",
-                  address: "10.9.0.2/32", allowedIPs: "10.9.0.0/24", mtu: 1380),
     ]
 }

@@ -38,20 +38,6 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         LSSupportsOpeningDocumentsInPlace: true
-        UTExportedTypeDeclarations:
-          - UTTypeIdentifier: com.yunfeng.wgconf
-            UTTypeDescription: WireGuard 配置
-            UTTypeConformsTo:
-              - public.plain-text
-            UTTypeTagSpecification:
-              public.filename-extension:
-                - conf
-        CFBundleDocumentTypes:
-          - CFBundleTypeName: WireGuard 配置
-            CFBundleTypeRole: Viewer
-            LSHandlerRank: Alternate
-            LSItemContentTypes:
-              - com.yunfeng.wgconf
         LSApplicationCategoryType: public.app-category.productivity
     settings:
       base:
