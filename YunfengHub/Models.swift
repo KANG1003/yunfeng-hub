@@ -69,7 +69,7 @@ final class AppStore {
     var template: ReportTemplate = .standard
 
     var navItems: [NavItem] = []
-    var sunPanelURL: String = "http://192.168.10.69:3000"
+    var sunPanelURL: String = "http://sp.kangkang.me"
 
     var profiles: [WGProfile] = []
     var activeProfileID: UUID?
@@ -165,12 +165,13 @@ final class AppStore {
     ]
 
     static let seedNav: [NavItem] = [
-        NavItem(name: "Home Assistant", host: "192.168.10.69", url: "http://192.168.10.69", symbol: "house"),
-        NavItem(name: "群晖 NAS", host: "192.168.10.252", url: "http://192.168.10.252:5000", symbol: "externaldrive"),
-        NavItem(name: "PVE", host: "192.168.10.240", url: "https://192.168.10.240:8006", symbol: "server.rack"),
-        NavItem(name: "爱快路由", host: "192.168.10.250", url: "https://192.168.10.250:8443", symbol: "wifi.router", isOnline: false),
-        NavItem(name: "Uptime Kuma", host: "kuma", url: "http://192.168.10.69:3001", symbol: "waveform.path.ecg"),
-        NavItem(name: "Sun-Panel", host: "panel", url: "http://192.168.10.69:3000", symbol: "safari.fill"),
+        NavItem(name: "导航面板", host: "sp.kangkang.me", url: "http://sp.kangkang.me", symbol: "safari.fill"),
+        NavItem(name: "备件管理", host: "bj.kangkang.me", url: "http://bj.kangkang.me/login.php", symbol: "shippingbox"),
+        NavItem(name: "日报神器", host: "rb.kangkang.me", url: "http://rb.kangkang.me/login.php", symbol: "square.and.pencil"),
+        NavItem(name: "仪电周结", host: "we.kangkang.me", url: "http://we.kangkang.me/index.php", symbol: "calendar"),
+        NavItem(name: "在线监控 Kuma", host: "kuma.kangkang.me", url: "http://kuma.kangkang.me", symbol: "waveform.path.ecg"),
+        NavItem(name: "容器日志 Dozzle", host: "log.kangkang.me", url: "http://log.kangkang.me", symbol: "doc.text.magnifyingglass"),
+        NavItem(name: "主机资源 Netdata", host: "sys.kangkang.me", url: "http://sys.kangkang.me", symbol: "cpu"),
     ]
 
     static let seedProfiles: [WGProfile] = [

@@ -23,7 +23,9 @@ targets:
     info:
       path: YunfengHub/Info.plist
       properties:
-        CFBundleDisplayName: 云峰工作台
+        CFBundleDisplayName: yunfeng
+        CFBundleName: yunfeng
+        CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -36,5 +38,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.yunfeng.hub
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: YunfengHub/YunfengHub.entitlements
         TARGETED_DEVICE_FAMILY: "1"

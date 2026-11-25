@@ -1,4 +1,4 @@
-# 云峰工作台 · iOS App（SwiftUI 工程）
+# yunfeng · iOS App（SwiftUI 工程）
 
 一个把日常运维面板收进手机的小工具：**Sun-Panel 导航 + WireGuard + 日报 + weekiy 周报 + 背景管理**。
 
@@ -101,6 +101,20 @@ open YunfengHub.xcodeproj
 | weekiy | ✅ 可用 | 周条 + 完成率进度条 + 周报一键生成 |
 | 背景管理 | ✅ 可用 | 8 套渐变壁纸 + 相册自定义 + 模糊/色调/卡片透明度，设置持久化 |
 | WireGuard | ⚠️ 界面完成，隧道未接 | 见下文第四节 |
+
+默认导航入口（首次启动写入，可在界面里改）：
+
+| 名称 | 地址 |
+|---|---|
+| 导航面板 | http://sp.kangkang.me |
+| 备件管理 | http://bj.kangkang.me/login.php |
+| 日报神器 | http://rb.kangkang.me/login.php |
+| 仪电周结 | http://we.kangkang.me/index.php |
+| 在线监控 Kuma | http://kuma.kangkang.me |
+| 容器日志 Dozzle | http://log.kangkang.me |
+| 主机资源 Netdata | http://sys.kangkang.me |
+
+App 显示名为 `yunfeng`，图标为深空渐变 + 山岳流云（`YunfengHub/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`，1024×1024 无透明通道）。
 
 ## 四、WireGuard 要真拨号，还差三步
 
