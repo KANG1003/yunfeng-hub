@@ -11,6 +11,7 @@ struct TerminalView: View {
     @State private var showSettings = false
     @State private var detail: IKuaiTerminal?
     @State private var keyword = ""
+    @State private var showLog = false
 
     private var filtered: [IKuaiTerminal] {
         let k = keyword.trimmingCharacters(in: .whitespaces)
@@ -52,6 +53,9 @@ struct TerminalView: View {
         .sheet(item: $detail) { t in
             terminalDetail(t)
         }
+        .sheet(isPresented: $showLog) {
+            logSheet
+        }
     }
 
     // MARK: 头部
@@ -92,7 +96,8 @@ struct TerminalView: View {
         case .loading: return "正在从路由器拉取…"
         case .ok:
             let time = svc.lastUpdate?.formatted(date: .omitted, time: .shortened) ?? ""
-            return "在线 \(svc.terminals.count) 台 · \(time)"
+            let mode = svc.usedMode.isEmpty ? "" : " · \(svc.usedMode)"
+            return "在线 \(svc.terminals.count) 台 · \(time)\(mode)"
         case .failed: return "连接失败"
         case .idle: return "未连接"
         }
@@ -136,6 +141,12 @@ struct TerminalView: View {
                         Task { await svc.refresh() }
                     }
                     GhostButton(title: "改设置", systemImage: "gearshape") { showSettings = true }
+                    GhostButton(title: "诊断", systemImage: "stethoscope") {
+                        Task {
+                            await svc.diagnose()
+                            showLog = true
+                        }
+                    }
                 }
                 .padding(.top, 2)
             }
@@ -256,11 +267,22 @@ struct TerminalView: View {
                     Text("必须能直连到这个地址：在家直连，出门走回家的 WireGuard。")
                 }
 
-                Section("账号") {
+                Section("账号（3.x 固件用）") {
                     TextField("admin", text: $svc.username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     SecureField("密码", text: $svc.password)
+                }
+
+                Section {
+                    TextField("32 位 API Token", text: $svc.token)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 13, design: .monospaced))
+                } header: {
+                    Text("API Token（4.x 固件用，可留空）")
+                } footer: {
+                    Text("路由器后台：系统设置 → 安全设置 → API Token，生成后粘进来。填了它就会优先走 4.x 接口。")
                 }
 
                 Section {
@@ -270,17 +292,25 @@ struct TerminalView: View {
                             if svc.status == .ok { showSettings = false }
                         }
                     }
+                    Button {
+                        Task {
+                            await svc.diagnose()
+                            showLog = true
+                        }
+                    } label: {
+                        Label("接口诊断", systemImage: "stethoscope")
+                    }
                     if svc.status == .failed && !svc.message.isEmpty {
                         Text(svc.message)
                             .font(.system(size: 12))
                             .foregroundStyle(Color.orange)
                     }
                     if svc.status == .ok {
-                        Text("已连上，\(svc.terminals.count) 台在线")
+                        Text("已连上（\(svc.usedMode)），\(svc.terminals.count) 台在线")
                             .font(.system(size: 12)).foregroundStyle(Color.green)
                     }
                 } footer: {
-                    Text("账号密码只存在这台手机的本地存储里。")
+                    Text("账号密码和 Token 只存在这台手机的本地存储里。")
                 }
             }
             .navigationTitle("爱快路由")
@@ -288,6 +318,35 @@ struct TerminalView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { showSettings = false }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    // MARK: 诊断日志
+
+    private var logSheet: some View {
+        NavigationStack {
+            ScrollView {
+                Text(svc.log.joined(separator: "\n"))
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .background(Color.black.opacity(0.94))
+            .foregroundStyle(Color.green.opacity(0.9))
+            .navigationTitle("接口诊断")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { showLog = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        UIPasteboard.general.string = svc.log.joined(separator: "\n")
+                    } label: { Image(systemName: "doc.on.doc") }
                 }
             }
         }
