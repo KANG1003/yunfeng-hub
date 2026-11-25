@@ -50,7 +50,7 @@ struct StatusDot: View {
         Circle()
             .fill(on ? (warn ? Color.orange : Color.green) : Color.gray.opacity(0.5))
             .frame(width: 8, height: 8)
-            .shadow(color: on ? (warn ? .orange : .green).opacity(0.7) : .clear, radius: 4)
+            .shadow(color: on ? (warn ? Color.orange : Color.green).opacity(0.7) : Color.clear, radius: 4)
     }
 }
 
