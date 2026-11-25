@@ -1,6 +1,6 @@
 # yunfeng · iOS App（SwiftUI 工程）
 
-一个把日常运维面板收进手机的小工具：**Sun-Panel 导航 + WireGuard + 日报 + weekiy 周报 + 背景管理**。
+一个把日常运维面板收进手机的小工具：**Sun-Panel 导航 + 爱快终端列表 + 日报 + weekiy 周报 + 背景管理**。
 
 ---
 
@@ -17,11 +17,12 @@
 ├── YunfengHub/
 │   ├── YunfengHubApp.swift     # 入口 + 根 TabView
 │   ├── Models.swift            # 数据模型 / 本地持久化 / AppStore
-│   ├── Services.swift          # 日报引擎 / 周报引擎 / WireGuardService / SunPanel
+│   ├── Services.swift          # 日报引擎 / 周报引擎 / SunPanel / 网络环境判定
 │   ├── BackgroundManager.swift # 背景管理（壁纸/模糊/色调/不透明度）
 │   ├── Components.swift        # 玻璃卡片等通用组件
 │   ├── NavigationHomeView.swift# 导航页（WebView + 快捷卡片）
-│   ├── VPNView.swift           # WireGuard 界面
+│   ├── TerminalView.swift      # 终端列表界面（爱快 API）
+│   ├── IKuaiService.swift      # 爱快本地接口客户端
 │   ├── DailyReportView.swift   # 日报
 │   ├── WeeklyView.swift        # weekiy 周视图 / 周报
 │   ├── BackgroundSettingsView.swift
@@ -101,7 +102,7 @@ open YunfengHub.xcodeproj
 | 写日报 | ✅ 可用 | 第 4 个 Tab，内嵌 http://rb.kangkang.me/login.php（原生日报视图保留在代码里，未挂 Tab） |
 | 仪电周结 | ✅ 可用 | 第 5 个 Tab，内嵌 http://we.kangkang.me/index.php |
 | 背景管理 | ✅ 可用 | 8 套渐变壁纸 + 相册自定义 + 模糊/色调/卡片透明度；入口在「导航」页右上角调色盘 |
-| WireGuard | ✅ 配置管理可用 | 粘贴/导入 .conf → 分享给官方 WireGuard 导入；不在本机建隧道 |
+| 终端 | ✅ 已接入爱快 API | 直连路由器拉 LAN 在线设备：名称/IP/MAC/上下行/连接数/在线时长 |
 
 导航卡片把内网 / 外网合成一张，按网络环境自动切地址（在 `192.168.10.x` 网段判为内网，否则走外网）；顶部胶囊可手动切「自动 / 内网 / 外网」，长按卡片可删除，右下角「添加入口」可加新的内网/外网地址对。
 
@@ -120,26 +121,9 @@ open YunfengHub.xcodeproj
 
 App 显示名为 `YUNFENG`，图标为深空渐变 + 山岳流云（`YunfengHub/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`，1024×1024 无透明通道）。
 
-## 四、WireGuard：变成「配置管理 + 交给官方 App」
-
-本工程不再假装拨号。iOS 让第三方 App 自己建隧道，必须有：
-
-1. 付费开发者账号（$99/年）
-2. NetworkExtension → Packet Tunnel 能力
-3. 单独的 Packet Tunnel Extension target + WireGuardKit
-
-万能签／免费证书签不出这个能力，所以本 App 只做配置这一层，隧道交给官方 **WireGuard** App（免费、支持 on-demand、更稳）：
-
-- **粘贴 .conf**：整段粘进去，自动解析 Endpoint / 私钥 / 对端公钥 / MTU / AllowedIPs
-- **从文件导入**：选 `.conf` 文件
-- **分享到 WireGuard**：生成标准 `.conf` 临时文件，走系统分享面板，选 WireGuard 即完成导入
-- **复制文本**：粘到 WireGuard App 里手动新建
-
-校验：只有密钥齐全的配置才能导出，缺密钥会明确提示，不会生成半截配置。
-
 ## 五、其它已知限制
 
-- 首次启动会写入演示数据（3 条任务 / 6 个导航项 / 2 个 WireGuard 配置），可直接在界面里改
+- 首次启动会写入演示数据（3 条任务 / 10 个导航项），可直接在界面里改
 - 数据存在 Documents 目录 `yunfeng-hub.json`，删 App 即清空
 - 导航页 WebView 只做浏览器内跳转，Home Assistant 这类需要登录态的站点建议直接用 Safari 打开（本工程里卡片点击是跳系统浏览器）
 - 想把 HA 仪表盘原生嵌入也可以，但 HA 的 token 要自己处理，工程里没做
