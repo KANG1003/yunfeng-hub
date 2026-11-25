@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 主 App 与 WireGuard 隧道扩展共享的 App Group -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.yunfeng.hub</string>
+    </array>
+
+    <!-- 真隧道才需要；未接 WireGuardKit 前可先注释掉，否则签名会报错 -->
+    <!--
+    <key>com.apple.developer.networking.networkextension</key>
+    <array>
+        <string>packet-tunnel-provider</string>
+    </array>
+    -->
+</dict>
+</plist>
