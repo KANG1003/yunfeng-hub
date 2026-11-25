@@ -17,6 +17,16 @@ struct VPNView: View {
     @State private var pasteText = ""
     @State private var pasteName = "家 · 内网"
     @State private var toast: String?
+    @State private var importError: String?
+
+    /// .conf 的类型：自定义导出类型 + 常见文本类型兜底，避免文件选择器把它变灰
+    private var confTypes: [UTType] {
+        var list: [UTType] = [UTType(exportedAs: "com.yunfeng.wgconf")]
+        if let legacy = UTType(filenameExtension: "conf") { list.append(legacy) }
+        list.append(contentsOf: [.plainText, .text, .data])
+        var seen = Set<String>()
+        return list.filter { seen.insert($0.identifier).inserted }
+    }
 
     private var profile: WGProfile? {
         store.profiles.first { $0.id == selectedID } ?? store.profiles.first
@@ -53,9 +63,15 @@ struct VPNView: View {
         .onChange(of: selectedID) { _, _ in rebuildExport() }
         .onChange(of: store.profiles) { _, _ in rebuildExport() }
         .sheet(isPresented: $showPasteSheet) { pasteSheet }
-        .fileImporter(isPresented: $showImporter,
-                      allowedContentTypes: [UTType(filenameExtension: "conf") ?? .item]) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: confTypes) { result in
             importFile(result)
+        }
+        .alert("导入失败",
+               isPresented: Binding(get: { importError != nil },
+                                    set: { if !$0 { importError = nil } })) {
+            Button("好", role: .cancel) { importError = nil }
+        } message: {
+            Text(importError ?? "")
         }
         .overlay(alignment: .bottom) {
             if let toast {
@@ -200,9 +216,15 @@ struct VPNView: View {
                 }
 
                 HStack(spacing: 8) {
+                    GhostButton(title: "剪贴板直读", systemImage: "square.on.square") {
+                        importFromClipboard()
+                    }
                     GhostButton(title: "复制文本", systemImage: "doc.on.doc") {
                         copyText()
                     }
+                }
+
+                HStack(spacing: 8) {
                     GhostButton(title: "官方 App", systemImage: "arrow.up.right.square") {
                         openWireGuardOnAppStore()
                     }
@@ -288,17 +310,40 @@ struct VPNView: View {
     }
 
     private func importFile(_ result: Result<URL, Error>) {
-        guard case .success(let url) = result else {
-            toast = "读取失败"
+        switch result {
+        case .failure(let err):
+            importError = "打不开这个文件：\(err.localizedDescription)\n如果是从「文件」里选不到 .conf，可以直接把内容粘到「粘贴 .conf」。"
+        case .success(let url):
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+            guard let raw = try? Data(contentsOf: url) else {
+                importError = "读不到文件内容，可能是没给访问权限，再选一次试试。"
+                return
+            }
+            guard let text = String(data: raw, encoding: .utf8)
+                    ?? String(data: raw, encoding: .isoLatin1) else {
+                importError = "这个文件不是纯文本，不是 WireGuard 的 .conf。"
+                return
+            }
+            accept(text, name: url.deletingPathExtension().lastPathComponent)
+        }
+    }
+
+    /// 剪贴板里如果正好是 .conf，一键入库
+    private func importFromClipboard() {
+        guard let text = UIPasteboard.general.string, !text.isEmpty else {
+            toast = "剪贴板是空的"
             hideToastLater()
             return
         }
-        let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-        guard let text = try? String(contentsOf: url, encoding: .utf8),
-              let p = WGConfig.parse(text, name: url.deletingPathExtension().lastPathComponent) else {
-            toast = "不是有效的 .conf"
-            hideToastLater()
+        accept(text, name: "剪贴板配置")
+    }
+
+    /// 供「用 YUNFENG 打开 .conf」的入口复用
+    private func accept(_ text: String, name: String) {
+        guard let p = WGConfig.parse(text, name: name) else {
+            importError = "没解析出 Endpoint。\n内容需要包含 [Interface] 和 [Peer] 两段，且 Endpoint = 主机:端口。"
             return
         }
         store.addProfile(p)

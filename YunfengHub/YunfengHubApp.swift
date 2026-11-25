@@ -72,5 +72,16 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active { net.refresh() }
         }
+        .onOpenURL { url in handleOpenURL(url) }
+    }
+
+    /// 支持「在 YUNFENG 中打开 .conf」：从文件 App / 分享面板把配置送进来
+    private func handleOpenURL(_ url: URL) {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        guard let text = try? String(contentsOf: url, encoding: .utf8),
+              let p = WGConfig.parse(text, name: url.deletingPathExtension().lastPathComponent)
+        else { return }
+        store.addProfile(p)
     }
 }
