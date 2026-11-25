@@ -30,6 +30,7 @@ struct NavigationHomeView: View {
     @Environment(AppStore.self) private var store
     @State private var showPanel = false
     @State private var showAdd = false
+    @State private var showBackground = false
     @State private var newName = ""
     @State private var newHost = ""
     @State private var newURL = ""
@@ -112,6 +113,24 @@ struct NavigationHomeView: View {
             .padding(.horizontal, 18)
         }
         .scrollIndicators(.hidden)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showBackground = true } label: {
+                    Image(systemName: "paintpalette")
+                }
+            }
+        }
+        .sheet(isPresented: $showBackground) {
+            NavigationStack {
+                BackgroundSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { showBackground = false }
+                        }
+                    }
+            }
+        }
         .sheet(isPresented: $showPanel) {
             NavigationStack {
                 Group {

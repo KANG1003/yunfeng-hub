@@ -1,6 +1,6 @@
 //
 //  YunfengHubApp.swift
-//  云峰工作台
+//  yunfeng
 //
 //  入口 + 根视图（底部 5 个 Tab）
 //
@@ -31,20 +31,36 @@ struct RootView: View {
                 .ignoresSafeArea()
 
             TabView {
-                NavigationHomeView()
-                    .tabItem { Label("导航", systemImage: "safari") }
+                NavigationStack {
+                    NavigationHomeView()
+                }
+                .tabItem { Label("导航", systemImage: "safari") }
 
-                VPNView()
-                    .tabItem { Label("VPN", systemImage: "shield.lefthalf.filled") }
+                NavigationStack {
+                    VPNView()
+                }
+                .tabItem { Label("VPN", systemImage: "shield.lefthalf.filled") }
 
-                DailyReportView()
-                    .tabItem { Label("日报", systemImage: "square.and.pencil") }
+                NavigationStack {
+                    WebPanelView(title: "备件系统",
+                                 subtitle: "bj.kangkang.me",
+                                 urlString: "http://bj.kangkang.me/login.php")
+                }
+                .tabItem { Label("备件", systemImage: "shippingbox") }
 
-                WeeklyView()
-                    .tabItem { Label("weekiy", systemImage: "chart.bar.xaxis") }
+                NavigationStack {
+                    WebPanelView(title: "写日报",
+                                 subtitle: "rb.kangkang.me",
+                                 urlString: "http://rb.kangkang.me/login.php")
+                }
+                .tabItem { Label("日报", systemImage: "square.and.pencil") }
 
-                BackgroundSettingsView()
-                    .tabItem { Label("背景", systemImage: "paintpalette") }
+                NavigationStack {
+                    WebPanelView(title: "仪电周结",
+                                 subtitle: "we.kangkang.me",
+                                 urlString: "http://we.kangkang.me/index.php")
+                }
+                .tabItem { Label("周结", systemImage: "calendar") }
             }
             .tint(.blue)
         }
