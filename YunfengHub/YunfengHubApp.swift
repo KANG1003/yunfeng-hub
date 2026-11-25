@@ -1,6 +1,6 @@
 //
 //  YunfengHubApp.swift
-//  yunfeng
+//  YUNFENG
 //
 //  入口 + 根视图（底部 5 个 Tab）
 //
@@ -11,12 +11,14 @@ import SwiftUI
 struct YunfengHubApp: App {
     @State private var store = AppStore()
     @State private var bg = BackgroundManager()
+    @State private var net = NetworkEnv()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(store)
                 .environment(bg)
+                .environment(net)
         }
     }
 }
@@ -24,6 +26,8 @@ struct YunfengHubApp: App {
 struct RootView: View {
     @Environment(AppStore.self) private var store
     @Environment(BackgroundManager.self) private var bg
+    @Environment(NetworkEnv.self) private var net
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -63,6 +67,10 @@ struct RootView: View {
                 .tabItem { Label("周结", systemImage: "calendar") }
             }
             .tint(.blue)
+        }
+        .onAppear { net.refresh() }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active { net.refresh() }
         }
     }
 }

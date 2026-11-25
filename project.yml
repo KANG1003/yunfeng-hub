@@ -23,8 +23,8 @@ targets:
     info:
       path: YunfengHub/Info.plist
       properties:
-        CFBundleDisplayName: yunfeng
-        CFBundleName: yunfeng
+        CFBundleDisplayName: YUNFENG
+        CFBundleName: YUNFENG
         CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

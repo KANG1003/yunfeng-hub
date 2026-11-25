@@ -6,6 +6,7 @@
 import Foundation
 import SwiftUI
 import Observation
+import Darwin
 
 // MARK: - 日报生成
 
@@ -158,4 +159,87 @@ final class SunPanelService {
     var isReachable: Bool = true
 
     var url: URL? { URL(string: urlString) }
+}
+
+// MARK: - 网络环境（内网 / 外网自动判定）
+
+enum NetMode: String, CaseIterable, Identifiable {
+    case auto, lan, wan
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .auto: return "自动"
+        case .lan:  return "内网"
+        case .wan:  return "外网"
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class NetworkEnv {
+
+    var mode: NetMode = .auto {
+        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "net.mode") }
+    }
+    var localIPs: [String] = []
+    var onHomeLAN: Bool = false
+
+    /// 当前是否按内网地址访问
+    var activeOnLAN: Bool {
+        switch mode {
+        case .lan: return true
+        case .wan: return false
+        case .auto: return onHomeLAN
+        }
+    }
+
+    var statusText: String {
+        if mode == .auto {
+            return onHomeLAN ? "自动 · 内网" : "自动 · 外网"
+        }
+        return mode.title
+    }
+
+    init() {
+        if let s = UserDefaults.standard.string(forKey: "net.mode"),
+           let m = NetMode(rawValue: s) { mode = m }
+        refresh()
+    }
+
+    func refresh() {
+        localIPs = Self.ipv4Addresses()
+        // 家里网段 192.168.10.x 判为内网
+        onHomeLAN = localIPs.contains { $0.hasPrefix("192.168.10.") }
+    }
+
+    func cycleMode() {
+        switch mode {
+        case .auto: mode = .lan
+        case .lan:  mode = .wan
+        case .wan:  mode = .auto
+        }
+        refresh()
+    }
+
+    static func ipv4Addresses() -> [String] {
+        var ptr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ptr) == 0, let first = ptr else { return [] }
+        defer { freeifaddrs(ptr) }
+
+        var out: [String] = []
+        var cur: UnsafeMutablePointer<ifaddrs>? = first
+        while let p = cur {
+            let a = p.pointee
+            if let sa = a.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET) {
+                var addr = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                if inet_ntop(AF_INET, &addr.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN)) != nil {
+                    out.append(String(cString: buf))
+                }
+            }
+            cur = a.ifa_next
+        }
+        return out
+    }
 }

@@ -1,20 +1,18 @@
 //
 //  WebPanelView.swift
-//  通用内嵌网页页签：直接打开自建站点（备件系统 / 日报神器 / 仪电周结）
+//  通用内嵌网页：直接打开自建站点，支持 HTTP Basic 登录（401）
 //
 
 import SwiftUI
 import UIKit
 import WebKit
 
-// MARK: - 持有 WKWebView 引用，供工具条调用
+// MARK: - 持有 WKWebView 引用
 final class WebRef {
     weak var webView: WKWebView?
     func reload() { webView?.reload() }
     func back() { webView?.goBack() }
     func forward() { webView?.goForward() }
-    var canGoBack: Bool { webView?.canGoBack ?? false }
-    var canGoForward: Bool { webView?.canGoForward ?? false }
 }
 
 // MARK: - 包装器
@@ -44,9 +42,7 @@ struct EmbeddedWeb: UIViewRepresentable {
 
     func updateUIView(_ web: WKWebView, context: Context) {
         ref.webView = web
-        if web.url == nil {
-            web.load(URLRequest(url: url))
-        }
+        if web.url == nil { web.load(URLRequest(url: url)) }
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
@@ -77,6 +73,71 @@ struct EmbeddedWeb: UIViewRepresentable {
             isLoading.wrappedValue = false
             failed.wrappedValue = true
         }
+
+        /// 401 / 407 时弹用户名密码框（nginx basic auth 很常见）
+        func webView(_ webView: WKWebView,
+                     didReceive challenge: URLAuthenticationChallenge,
+                     completionHandler: @escaping (URLSession.AuthChallengeDisposition,
+                                                   URLCredential?) -> Void) {
+
+            let method = challenge.protectionSpace.authenticationMethod
+
+            if method == NSURLAuthenticationMethodServerTrust,
+               let trust = challenge.protectionSpace.serverTrust {
+                completionHandler(.useCredential, URLCredential(trust: trust))
+                return
+            }
+
+            guard method == NSURLAuthenticationMethodHTTPBasic
+                    || method == NSURLAuthenticationMethodHTTPDigest else {
+                completionHandler(.performDefaultHandling, nil)
+                return
+            }
+
+            let hostKey = challenge.protectionSpace.host
+            let userKey = "auth.user.\(hostKey)"
+            let passKey = "auth.pass.\(hostKey)"
+
+            if let u = UserDefaults.standard.string(forKey: userKey),
+               let p = UserDefaults.standard.string(forKey: passKey),
+               !u.isEmpty {
+                completionHandler(.useCredential,
+                                  URLCredential(user: u, password: p, persistence: .permanent))
+                return
+            }
+
+            Task { @MainActor in
+                guard let presenter = webView.window?.rootViewController?.topMost else {
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                    return
+                }
+                let alert = UIAlertController(
+                    title: "需要登录",
+                    message: "\(hostKey) 要求输入用户名和密码",
+                    preferredStyle: .alert)
+                alert.addTextField {
+                    $0.placeholder = "用户名"
+                    $0.autocapitalizationType = .none
+                    $0.autocorrectionType = .no
+                }
+                alert.addTextField {
+                    $0.placeholder = "密码"
+                    $0.isSecureTextEntry = true
+                }
+                alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                })
+                alert.addAction(UIAlertAction(title: "登录", style: .default) { _ in
+                    let u = alert.textFields?.first?.text ?? ""
+                    let p = alert.textFields?.last?.text ?? ""
+                    UserDefaults.standard.set(u, forKey: userKey)
+                    UserDefaults.standard.set(p, forKey: passKey)
+                    completionHandler(.useCredential,
+                                      URLCredential(user: u, password: p, persistence: .permanent))
+                })
+                presenter.present(alert, animated: true)
+            }
+        }
     }
 }
 
@@ -85,11 +146,12 @@ struct WebPanelView: View {
     let title: String
     let subtitle: String
     let urlString: String
+    var dismissible: Bool = false
 
+    @Environment(\.dismiss) private var dismiss
     @State private var ref = WebRef()
     @State private var isLoading = true
     @State private var failed = false
-    @State private var showToolbar = true
 
     private var url: URL? { URL(string: urlString) }
 
@@ -140,6 +202,11 @@ struct WebPanelView: View {
                     Text(subtitle).font(.system(size: 10.5)).foregroundStyle(.secondary)
                 }
             }
+            if dismissible {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("关闭") { dismiss() }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { openInSafari() } label: { Image(systemName: "safari") }
             }
@@ -152,9 +219,7 @@ struct WebPanelView: View {
             Button { ref.forward() } label: { Image(systemName: "chevron.right") }
             Button { ref.reload() } label: { Image(systemName: "arrow.clockwise") }
             Spacer()
-            Button { openInSafari() } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
+            Button { openInSafari() } label: { Image(systemName: "square.and.arrow.up") }
         }
         .font(.system(size: 15, weight: .medium))
         .foregroundStyle(.white.opacity(0.82))
@@ -166,5 +231,19 @@ struct WebPanelView: View {
     private func openInSafari() {
         guard let url else { return }
         UIApplication.shared.open(url)
+    }
+}
+
+// MARK: - 顶层控制器
+extension UIViewController {
+    var topMost: UIViewController {
+        if let presented = presentedViewController { return presented.topMost }
+        if let nav = self as? UINavigationController, let visible = nav.visibleViewController {
+            return visible.topMost
+        }
+        if let tab = self as? UITabBarController, let selected = tab.selectedViewController {
+            return selected.topMost
+        }
+        return self
     }
 }

@@ -103,19 +103,22 @@ open YunfengHub.xcodeproj
 | 背景管理 | ✅ 可用 | 8 套渐变壁纸 + 相册自定义 + 模糊/色调/卡片透明度；入口在「导航」页右上角调色盘 |
 | WireGuard | ✅ 配置管理可用 | 粘贴/导入 .conf → 分享给官方 WireGuard 导入；不在本机建隧道 |
 
-默认导航入口（首次启动写入，可在界面里改）：
+导航卡片把内网 / 外网合成一张，按网络环境自动切地址（在 `192.168.10.x` 网段判为内网，否则走外网）；顶部胶囊可手动切「自动 / 内网 / 外网」，长按卡片可删除，右下角「添加入口」可加新的内网/外网地址对。
 
-| 名称 | 地址 |
-|---|---|
-| 导航面板 | http://sp.kangkang.me |
-| 备件管理 | http://bj.kangkang.me/login.php |
-| 日报神器 | http://rb.kangkang.me/login.php |
-| 仪电周结 | http://we.kangkang.me/index.php |
-| 在线监控 Kuma | http://kuma.kangkang.me |
-| 容器日志 Dozzle | http://log.kangkang.me |
-| 主机资源 Netdata | http://sys.kangkang.me |
+| 名称 | 内网 | 外网 |
+|---|---|---|
+| 导航面板 | http://192.168.10.69:3000 | http://sp.kangkang.me |
+| 备件管理 | — | http://bj.kangkang.me/login.php |
+| 日报神器 | — | http://rb.kangkang.me/login.php |
+| 仪电周结 | — | http://we.kangkang.me/index.php |
+| 在线监控 Kuma | http://192.168.10.69:3001 | http://kuma.kangkang.me |
+| 容器日志 Dozzle | — | http://log.kangkang.me |
+| 主机资源 Netdata | — | http://sys.kangkang.me |
+| Home Assistant | http://192.168.10.69 | https://ha.yunfeng.pro |
+| 群晖 NAS | http://192.168.10.252:5000 | — |
+| PVE | https://192.168.10.240:8006 | — |
 
-App 显示名为 `yunfeng`，图标为深空渐变 + 山岳流云（`YunfengHub/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`，1024×1024 无透明通道）。
+App 显示名为 `YUNFENG`，图标为深空渐变 + 山岳流云（`YunfengHub/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`，1024×1024 无透明通道）。
 
 ## 四、WireGuard：变成「配置管理 + 交给官方 App」
 

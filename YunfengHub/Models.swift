@@ -39,10 +39,28 @@ enum ReportTemplate: String, CaseIterable, Codable, Identifiable {
 struct NavItem: Codable, Identifiable, Hashable {
     var id = UUID()
     var name: String
-    var host: String
-    var url: String
-    var symbol: String
-    var isOnline: Bool = true
+    var symbol: String = "link"
+    var lanURL: String = ""     // 内网地址，可为空
+    var wanURL: String = ""     // 外网地址，可为空
+    var note: String = ""
+
+    var hasLAN: Bool { !lanURL.isEmpty }
+    var hasWAN: Bool { !wanURL.isEmpty }
+
+    /// 按当前网络环境取地址：在内网优先走 lan，缺哪个用另一个兜底
+    func url(onLAN: Bool) -> URL? {
+        let primary = onLAN ? lanURL : wanURL
+        let fallback = onLAN ? wanURL : lanURL
+        return URL(string: primary.isEmpty ? fallback : primary)
+    }
+
+    /// 卡片上显示的主机名
+    func displayHost(onLAN: Bool) -> String {
+        let primary = onLAN ? lanURL : wanURL
+        let s = primary.isEmpty ? (onLAN ? wanURL : lanURL) : primary
+        return s.replacingOccurrences(of: "http://", with: "")
+                .replacingOccurrences(of: "https://", with: "")
+    }
 }
 
 // MARK: - WireGuard 配置
@@ -123,8 +141,14 @@ final class AppStore {
 
     // MARK: 导航
 
-    func addNav(name: String, host: String, url: String, symbol: String = "link") {
-        navItems.append(NavItem(name: name, host: host, url: url, symbol: symbol))
+    func addNav(name: String, lanURL: String = "", wanURL: String = "",
+                symbol: String = "link") {
+        navItems.append(NavItem(name: name, symbol: symbol, lanURL: lanURL, wanURL: wanURL))
+        save()
+    }
+
+    func deleteNav(_ item: NavItem) {
+        navItems.removeAll { $0.id == item.id }
         save()
     }
 
@@ -188,13 +212,26 @@ final class AppStore {
     ]
 
     static let seedNav: [NavItem] = [
-        NavItem(name: "导航面板", host: "sp.kangkang.me", url: "http://sp.kangkang.me", symbol: "safari.fill"),
-        NavItem(name: "备件管理", host: "bj.kangkang.me", url: "http://bj.kangkang.me/login.php", symbol: "shippingbox"),
-        NavItem(name: "日报神器", host: "rb.kangkang.me", url: "http://rb.kangkang.me/login.php", symbol: "square.and.pencil"),
-        NavItem(name: "仪电周结", host: "we.kangkang.me", url: "http://we.kangkang.me/index.php", symbol: "calendar"),
-        NavItem(name: "在线监控 Kuma", host: "kuma.kangkang.me", url: "http://kuma.kangkang.me", symbol: "waveform.path.ecg"),
-        NavItem(name: "容器日志 Dozzle", host: "log.kangkang.me", url: "http://log.kangkang.me", symbol: "doc.text.magnifyingglass"),
-        NavItem(name: "主机资源 Netdata", host: "sys.kangkang.me", url: "http://sys.kangkang.me", symbol: "cpu"),
+        NavItem(name: "导航面板", symbol: "safari.fill",
+                lanURL: "http://192.168.10.69:3000", wanURL: "http://sp.kangkang.me"),
+        NavItem(name: "备件管理", symbol: "shippingbox",
+                lanURL: "", wanURL: "http://bj.kangkang.me/login.php"),
+        NavItem(name: "日报神器", symbol: "square.and.pencil",
+                lanURL: "", wanURL: "http://rb.kangkang.me/login.php"),
+        NavItem(name: "仪电周结", symbol: "calendar",
+                lanURL: "", wanURL: "http://we.kangkang.me/index.php"),
+        NavItem(name: "在线监控 Kuma", symbol: "waveform.path.ecg",
+                lanURL: "http://192.168.10.69:3001", wanURL: "http://kuma.kangkang.me"),
+        NavItem(name: "容器日志 Dozzle", symbol: "doc.text.magnifyingglass",
+                lanURL: "", wanURL: "http://log.kangkang.me"),
+        NavItem(name: "主机资源 Netdata", symbol: "cpu",
+                lanURL: "", wanURL: "http://sys.kangkang.me"),
+        NavItem(name: "Home Assistant", symbol: "house",
+                lanURL: "http://192.168.10.69", wanURL: "https://ha.yunfeng.pro"),
+        NavItem(name: "群晖 NAS", symbol: "externaldrive",
+                lanURL: "http://192.168.10.252:5000", wanURL: ""),
+        NavItem(name: "PVE", symbol: "server.rack",
+                lanURL: "https://192.168.10.240:8006", wanURL: ""),
     ]
 
     static let seedProfiles: [WGProfile] = [
