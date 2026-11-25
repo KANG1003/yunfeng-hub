@@ -29,6 +29,41 @@ struct IKuaiTerminal: Identifiable, Hashable {
     var connections: String
     var online: String
     var raw: [String: String] = [:]
+    var isOnline: Bool = true
+    /// 离线设备用：最后一次在线时间，形如「11-22 18:12」
+    var lastSeen: String = ""
+    var totalUp: Double = 0
+    var totalDown: Double = 0
+}
+
+// MARK: - 路由器状态（/api/v4.0/monitoring/system）
+
+struct IKuaiSystem: Equatable {
+    var cpuPercent: Double = 0
+    var cpuTemp: Double = 0
+    var memPercent: String = ""
+    var onlineCount: Int = 0
+    var wanUp: Double = 0      // bytes/s
+    var wanDown: Double = 0    // bytes/s
+    var connNum: Int = 0
+    var uptime: String = ""
+    var version: String = ""
+}
+
+// MARK: - 单台终端流量采样（/api/v4.0/monitoring/clients-traffic-load）
+
+struct IKuaiTrafficPoint: Identifiable, Equatable {
+    var id: Int          // timestamp
+    var timestamp: Int
+    var up: Double       // bytes/s
+    var down: Double     // bytes/s
+    var conns: Int
+}
+
+struct IKuaiProtoItem: Identifiable, Equatable {
+    var id: String
+    var name: String
+    var total: Double    // bytes
 }
 
 // MARK: - 自签证书放行（爱快 web 用自签证书）
@@ -85,6 +120,8 @@ final class IKuaiService {
     }
 
     var terminals: [IKuaiTerminal] = []
+    var offlineTerminals: [IKuaiTerminal] = []
+    var sys: IKuaiSystem?
     var status: Status = .idle
     var message: String = ""
     var lastUpdate: Date?
@@ -281,13 +318,26 @@ final class IKuaiService {
     // → {"code":0,"message":"Success","results":{"data":[…],"total":N}}
 
     private func fetchV4() async throws {
-        let (httpCode, data) = try await request("/api/v4.0/monitoring/clients-online?page=1&limit=200",
-                                                 body: nil, bearer: token, label: "v4 clients-online")
+        terminals = try await fetchClients(offline: false)
+            .sorted { ipOrder($0.ip) < ipOrder($1.ip) }
+        offlineTerminals = ((try? await fetchClients(offline: true)) ?? [])
+            .sorted { ipOrder($0.ip) < ipOrder($1.ip) }
+        sys = try? await fetchSystem()
+        usedMode = "4.x API"
+        lastUpdate = .now
+    }
+
+    /// 在线 / 离线终端列表
+    private func fetchClients(offline: Bool) async throws -> [IKuaiTerminal] {
+        let path = offline
+            ? "/api/v4.0/monitoring/clients-offline?page=1&limit=200"
+            : "/api/v4.0/monitoring/clients-online?page=1&limit=200"
+        let (httpCode, data) = try await request(path, body: nil, bearer: token,
+                                                 label: offline ? "v4 clients-offline" : "v4 clients-online")
         if httpCode == 401 || httpCode == 403 { throw IKuaiError.loginFailed }
         guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             throw IKuaiError.badPayload("返回不是 JSON")
         }
-
         let code = (json["code"] as? Int) ?? 0
         if code != 0 {
             throw IKuaiError.apiFailed((json["message"] as? String) ?? "code=\(code)")
@@ -295,13 +345,89 @@ final class IKuaiService {
 
         let inner = json["results"] as? [String: Any]
         let rows = (inner?["data"] as? [[String: Any]])
+            ?? (inner?["offline_data"] as? [[String: Any]])
+            ?? (inner?["list"] as? [[String: Any]])
             ?? (json["data"] as? [[String: Any]])
             ?? []
+        return rows.map { Self.mapV4Row($0, online: !offline) }
+    }
 
-        terminals = rows.map { Self.mapV4Row($0) }
-            .sorted { ipOrder($0.ip) < ipOrder($1.ip) }
-        usedMode = "4.x API"
-        lastUpdate = .now
+    /// 路由状态：CPU / 内存 / WAN 实时速率 / 在线数 / 连接数
+    private func fetchSystem() async throws -> IKuaiSystem {
+        let (httpCode, data) = try await request("/api/v4.0/monitoring/system", body: nil,
+                                                 bearer: token, label: "v4 system")
+        if httpCode == 401 || httpCode == 403 { throw IKuaiError.loginFailed }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let inner = json["results"] as? [String: Any],
+              let info = inner["sysinfo"] as? [String: Any] else {
+            throw IKuaiError.badPayload("system 返回结构不符")
+        }
+
+        var s = IKuaiSystem()
+
+        // cpu: ["5.75%","5.00%",…] 取各核平均
+        if let cores = info["cpu"] as? [Any], !cores.isEmpty {
+            let values = cores.map { Self.percent($0) }
+            if !values.isEmpty { s.cpuPercent = values.reduce(0, +) / Double(values.count) }
+        }
+        if let temps = info["cputemp"] as? [Any], let first = temps.first {
+            s.cpuTemp = Self.dbl(first)
+        }
+        if let mem = info["memory"] as? [String: Any] {
+            if let used = mem["used"] as? String { s.memPercent = used }
+            else if let used = mem["used"] as? NSNumber { s.memPercent = "\(used.intValue)%" }
+        }
+        if let ou = info["online_user"] as? [String: Any] {
+            s.onlineCount = Int(Self.dbl(ou["count"]))
+        }
+        if let stream = info["stream"] as? [String: Any] {
+            s.wanUp = Self.dbl(stream["upload"])
+            s.wanDown = Self.dbl(stream["download"])
+            s.connNum = Int(Self.dbl(stream["connect_num"]))
+        }
+        s.uptime = Self.duration(Int(Self.dbl(info["uptime"])))
+        if let ver = info["verinfo"] as? [String: Any], let v = ver["version"] as? String {
+            s.version = v
+        }
+        return s
+    }
+
+    /// 单台设备的近 5 分钟流量（路由器每 5 秒一个点，共 60 点）
+    func fetchTraffic(ip: String, mac: String) async throws -> [IKuaiTrafficPoint] {
+        guard !token.isEmpty, !ip.isEmpty else { return [] }
+        let path = "/api/v4.0/monitoring/clients-traffic-load?ip=\(ip)&mac=\(mac)"
+        let (httpCode, data) = try await request(path, body: nil, bearer: token, label: "v4 traffic-load")
+        if httpCode == 401 || httpCode == 403 { throw IKuaiError.loginFailed }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let inner = json["results"] as? [String: Any] else { return [] }
+        let rows = (inner["terminal_stream_collect"] as? [[String: Any]])
+            ?? (inner["data"] as? [[String: Any]])
+            ?? []
+        return rows.compactMap { r in
+            let ts = Int(Self.dbl(r["timestamp"]))
+            guard ts > 0 else { return nil }
+            return IKuaiTrafficPoint(id: ts, timestamp: ts,
+                                     up: Self.dbl(r["upload"]),
+                                     down: Self.dbl(r["download"]),
+                                     conns: Int(Self.dbl(r["conn_num"])))
+        }
+        .sorted { $0.timestamp < $1.timestamp }
+    }
+
+    /// 单台设备的应用协议占比
+    func fetchProtocols(ip: String, mac: String) async throws -> [IKuaiProtoItem] {
+        guard !token.isEmpty, !ip.isEmpty else { return [] }
+        let path = "/api/v4.0/monitoring/clients/protocols?ip=\(ip)&mac=\(mac)"
+        let (httpCode, data) = try await request(path, body: nil, bearer: token, label: "v4 protocols")
+        if httpCode == 401 || httpCode == 403 { throw IKuaiError.loginFailed }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let inner = json["results"] as? [String: Any],
+              let rows = inner["data"] as? [[String: Any]] else { return [] }
+        return rows.compactMap { r in
+            guard let name = r["proto_name"] as? String, !name.isEmpty else { return nil }
+            return IKuaiProtoItem(id: name, name: name, total: Self.dbl(r["total"]))
+        }
+        .sorted { $0.total > $1.total }
     }
 
     // MARK: 统一请求
@@ -388,7 +514,7 @@ final class IKuaiService {
 
     // MARK: 4.x 字段映射（字段名来自实测返回）
 
-    nonisolated static func mapV4Row(_ row: [String: Any]) -> IKuaiTerminal {
+    nonisolated static func mapV4Row(_ row: [String: Any], online: Bool = true) -> IKuaiTerminal {
         func str(_ keys: [String]) -> String {
             for k in keys {
                 if let s = row[k] as? String, !s.isEmpty { return s }
@@ -416,11 +542,50 @@ final class IKuaiService {
         return IKuaiTerminal(
             id: mac.isEmpty ? ip : mac,
             ip: ip, mac: mac, host: name,
-            up: kb(up), down: kb(down),
+            up: online ? kb(up) : "—",
+            down: online ? kb(down) : "—",
             connections: str(["connect_num"]),
-            online: dur(from: str(["uptime"])),
-            raw: raw
+            online: online ? dur(from: str(["uptime"])) : "",
+            raw: raw,
+            isOnline: online,
+            lastSeen: online ? "" : shortTime(dbl(row["logout_time"])),
+            totalUp: dbl(row["total_up"]),
+            totalDown: dbl(row["total_down"])
         )
+    }
+
+    /// unix 秒 → "11-22 18:12"
+    nonisolated static func shortTime(_ ts: Double) -> String {
+        guard ts > 1_000_000_000 else { return "" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MM-dd HH:mm"
+        return f.string(from: Date(timeIntervalSince1970: ts))
+    }
+
+    /// 累计字节 → "11.1M"
+    nonisolated static func bytes(_ v: Double) -> String {
+        if v >= 1024 * 1024 * 1024 { return String(format: "%.2fG", v / 1073741824) }
+        if v >= 1024 * 1024 { return String(format: "%.1fM", v / 1048576) }
+        if v >= 1024 { return String(format: "%.0fK", v / 1024) }
+        return String(format: "%.0f", v)
+    }
+
+    /// 秒数 → "12天3时"
+    nonisolated static func duration(_ seconds: Int) -> String {
+        guard seconds > 0 else { return "" }
+        let day = seconds / 86400, hour = (seconds % 86400) / 3600, minute = (seconds % 3600) / 60
+        if day > 0 { return "\(day)天\(hour)时" }
+        if hour > 0 { return "\(hour)时\(minute)分" }
+        return "\(minute)分"
+    }
+
+    /// "5.75%" / 5.75 / NSNumber → 5.75
+    nonisolated static func percent(_ v: Any?) -> Double {
+        if let s = v as? String {
+            return Double(s.replacingOccurrences(of: "%", with: "")) ?? 0
+        }
+        return dbl(v)
     }
 
     /// 字节/秒 → 易读速率（iKuai 返回值就是 bytes/s）
