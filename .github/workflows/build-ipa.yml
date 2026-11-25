@@ -1,0 +1,66 @@
+name: Build Unsigned IPA
+
+# 触发：手动点一下 / push 到 main
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "YunfengHub/**"
+      - "project.yml"
+      - ".github/workflows/build-ipa.yml"
+
+jobs:
+  build:
+    # macOS runner 自带 Xcode，不碰 Mac 也能出包
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 查看工具链
+        run: |
+          xcodebuild -version
+          xcode-select -p
+
+      - name: 安装 XcodeGen
+        run: |
+          brew install xcodegen || brew upgrade xcodegen
+          xcodegen --version
+
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+
+      - name: 编译（关闭签名）
+        run: |
+          xcodebuild \
+            -project YunfengHub.xcodeproj \
+            -scheme YunfengHub \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: 打包成 ipa
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/YunfengHub.app"
+          ls -lh "$APP_PATH"
+          mkdir -p out/Payload
+          cp -R "$APP_PATH" out/Payload/
+          cd out
+          zip -qry YunfengHub-unsigned.ipa Payload
+          echo "=== 产物 ==="
+          ls -lh YunfengHub-unsigned.ipa
+          shasum -a 256 YunfengHub-unsigned.ipa
+
+      - name: 上传 ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: YunfengHub-unsigned-ipa
+          path: out/YunfengHub-unsigned.ipa
+          retention-days: 30
