@@ -30,6 +30,7 @@ struct EmbeddedWeb: UIViewRepresentable {
         conf.websiteDataStore = .default()
         let web = WKWebView(frame: .zero, configuration: conf)
         web.navigationDelegate = context.coordinator
+        web.uiDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
         web.isOpaque = false
         web.backgroundColor = .clear
@@ -45,7 +46,7 @@ struct EmbeddedWeb: UIViewRepresentable {
         if web.url == nil { web.load(URLRequest(url: url)) }
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let isLoading: Binding<Bool>
         let failed: Binding<Bool>
 
@@ -61,6 +62,72 @@ struct EmbeddedWeb: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoading.wrappedValue = false
+            // 把 target="_blank" 去掉，点击不外跳、直接在当前页面打开
+            webView.evaluateJavaScript("""
+            (function(){
+              document.querySelectorAll('a[target="_blank"]').forEach(function(a){
+                a.removeAttribute('target');
+              });
+            })();
+            """, completionHandler: nil)
+        }
+
+        // MARK: 新窗口 / window.open：导航类面板大量使用 target=_blank，不处理就会点了没反应
+        func webView(_ webView: WKWebView,
+                     createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction,
+                     windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+
+        // JS alert：不实现的话，点某些卡片会「毫无反应」
+        func webView(_ webView: WKWebView,
+                     runJavaScriptAlertPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo,
+                     completionHandler: @escaping () -> Void) {
+            Task { @MainActor in
+                guard let presenter = webView.window?.rootViewController?.topMost else {
+                    completionHandler()
+                    return
+                }
+                let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "好", style: .default) { _ in completionHandler() })
+                presenter.present(alert, animated: true)
+            }
+        }
+
+        func webView(_ webView: WKWebView,
+                     runJavaScriptConfirmPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo,
+                     completionHandler: @escaping (Bool) -> Void) {
+            Task { @MainActor in
+                guard let presenter = webView.window?.rootViewController?.topMost else {
+                    completionHandler(false)
+                    return
+                }
+                let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(false) })
+                alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in completionHandler(true) })
+                presenter.present(alert, animated: true)
+            }
+        }
+
+        // 非 http(s) 的跳转（tel: / mailto: / 自定义 scheme）交给系统
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if let scheme = navigationAction.request.url?.scheme?.lowercased(),
+               !["http", "https", "about", "data", "javascript", "blob"].contains(scheme) {
+                if let url = navigationAction.request.url {
+                    Task { @MainActor in UIApplication.shared.open(url) }
+                }
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
