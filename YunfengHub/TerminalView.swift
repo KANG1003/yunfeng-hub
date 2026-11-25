@@ -205,8 +205,8 @@ struct TerminalView: View {
 
                 VStack(alignment: .trailing, spacing: 2) {
                     HStack(spacing: 6) {
-                        Label(num(t.up), systemImage: "arrow.up")
-                        Label(num(t.down), systemImage: "arrow.down")
+                        Label(fmt(t.up), systemImage: "arrow.up")
+                        Label(fmt(t.down), systemImage: "arrow.down")
                     }
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -233,10 +233,12 @@ struct TerminalView: View {
         }
     }
 
-    private func num(_ s: String) -> String {
-        guard let d = Double(s) else { return s.isEmpty ? "0" : s }
-        if d >= 1024 { return String(format: "%.1fM", d / 1024) }
-        return String(format: "%.0fK", d)
+    /// 已带单位的直接显示，纯数字按 KB 处理
+    private func fmt(_ s: String) -> String {
+        if s.isEmpty { return "0" }
+        if s.hasSuffix("K") || s.hasSuffix("M") || s.hasSuffix("B") { return s }
+        guard let d = Double(s) else { return s }
+        return d >= 1024 ? String(format: "%.1fM", d / 1024) : String(format: "%.0fK", d)
     }
 
     private func icon(for t: IKuaiTerminal) -> String {
@@ -364,8 +366,8 @@ struct TerminalView: View {
                     kv("MAC", t.mac.isEmpty ? "—" : t.mac)
                     kv("在线时长", t.online.isEmpty ? "—" : t.online)
                     kv("连接数", t.connections.isEmpty ? "—" : t.connections)
-                    kv("上行", "\(t.up) KB/s")
-                    kv("下行", "\(t.down) KB/s")
+                    kv("上行", fmt(t.up) + "/s")
+                    kv("下行", fmt(t.down) + "/s")
                 }
                 Section("路由器返回的全部字段") {
                     ForEach(t.raw.keys.sorted(), id: \.self) { k in

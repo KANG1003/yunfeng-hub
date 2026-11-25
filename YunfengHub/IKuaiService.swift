@@ -193,9 +193,9 @@ final class IKuaiService {
             log.append("\n提示：若 [2]/[3] 都返回 Result=-1，多半是 4.x 固件，去 系统设置 → 安全设置 → API Token 生成一个填进来。")
         } else {
             do {
-                let (code, data) = try await request("/api/v4.0/monitoring/clients?page=1&limit=100",
+                let (code, data) = try await request("/api/v4.0/monitoring/clients-online?page=1&limit=100",
                                                      body: nil, bearer: token,
-                                                     label: "[4] GET /api/v4.0/monitoring/clients")
+                                                     label: "[4] GET /api/v4.0/monitoring/clients-online")
                 log.append("HTTP \(code)\n正文：\(preview(data))")
             } catch {
                 log.append("\n[4] 新接口失败：\(error.localizedDescription)")
@@ -276,33 +276,32 @@ final class IKuaiService {
         return rows.map { Self.mapRow($0) }.sorted { ipOrder($0.ip) < ipOrder($1.ip) }
     }
 
-    // MARK: 新固件（4.x REST）
+    // MARK: 新固件（4.x REST，实测可用）
+    // GET /api/v4.0/monitoring/clients-online?page=1&limit=200
+    // → {"code":0,"message":"Success","results":{"data":[…],"total":N}}
 
     private func fetchV4() async throws {
-        var lastErr: Error = IKuaiError.apiFailed("没有可用接口")
-        for path in ["/api/v4.0/monitoring/clients?page=1&limit=100",
-                     "/api/v4.0/monitoring/clients-online?page=1&limit=100",
-                     "/api/v4.0/monitoring/lan-clients?page=1&limit=100"] {
-            do {
-                let (code, data) = try await request(path, body: nil, bearer: token, label: "v4 \(path)")
-                if code == 401 || code == 403 { throw IKuaiError.loginFailed }
-                guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-                    throw IKuaiError.badPayload("返回不是 JSON")
-                }
-                let rows = Self.rows(from: json)
-                if !rows.isEmpty || path.contains("clients?") {
-                    terminals = rows.map { Self.mapRow($0) }
-                        .sorted { ipOrder($0.ip) < ipOrder($1.ip) }
-                    usedMode = "4.x API"
-                    lastUpdate = .now
-                    return
-                }
-                lastErr = IKuaiError.badPayload("列表为空")
-            } catch {
-                lastErr = error
-            }
+        let (httpCode, data) = try await request("/api/v4.0/monitoring/clients-online?page=1&limit=200",
+                                                 body: nil, bearer: token, label: "v4 clients-online")
+        if httpCode == 401 || httpCode == 403 { throw IKuaiError.loginFailed }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            throw IKuaiError.badPayload("返回不是 JSON")
         }
-        throw lastErr
+
+        let code = (json["code"] as? Int) ?? 0
+        if code != 0 {
+            throw IKuaiError.apiFailed((json["message"] as? String) ?? "code=\(code)")
+        }
+
+        let inner = json["results"] as? [String: Any]
+        let rows = (inner?["data"] as? [[String: Any]])
+            ?? (json["data"] as? [[String: Any]])
+            ?? []
+
+        terminals = rows.map { Self.mapV4Row($0) }
+            .sorted { ipOrder($0.ip) < ipOrder($1.ip) }
+        usedMode = "4.x API"
+        lastUpdate = .now
     }
 
     // MARK: 统一请求
@@ -385,6 +384,71 @@ final class IKuaiService {
             online: pick(["uptime", "online_time", "connect_time", "online"]),
             raw: raw
         )
+    }
+
+    // MARK: 4.x 字段映射（字段名来自实测返回）
+
+    nonisolated static func mapV4Row(_ row: [String: Any]) -> IKuaiTerminal {
+        func str(_ keys: [String]) -> String {
+            for k in keys {
+                if let s = row[k] as? String, !s.isEmpty { return s }
+                if let n = row[k] as? NSNumber { return n.stringValue }
+            }
+            return ""
+        }
+
+        let ip = str(["ip_addr", "ipv4_addr", "ip"])
+        let mac = str(["mac"])
+        var name = str(["hostname", "termname", "comment"])
+        if name.isEmpty { name = str(["client_model"]) }
+        if name.isEmpty { name = str(["client_vendor"]) }
+        if name.isEmpty { name = "未知设备" }
+
+        let up = dbl(row["upload"])
+        let down = dbl(row["download"])
+
+        var raw: [String: String] = [:]
+        for (k, v) in row {
+            if let s = v as? String { raw[k] = s }
+            else if let n = v as? NSNumber { raw[k] = n.stringValue }
+        }
+
+        return IKuaiTerminal(
+            id: mac.isEmpty ? ip : mac,
+            ip: ip, mac: mac, host: name,
+            up: kb(up), down: kb(down),
+            connections: str(["connect_num"]),
+            online: dur(from: str(["uptime"])),
+            raw: raw
+        )
+    }
+
+    /// 字节/秒 → 易读速率（iKuai 返回值就是 bytes/s）
+    nonisolated static func kb(_ v: Double) -> String {
+        if v >= 1024 * 1024 { return String(format: "%.1fM", v / 1048576) }
+        if v >= 1024 { return String(format: "%.0fK", v / 1024) }
+        return String(format: "%.0f", v)
+    }
+
+    /// "2026-11-21 21:33:48" → "3天22时"
+    nonisolated static func dur(from start: String) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        guard let d = f.date(from: start) else { return "" }
+        let s = Int(Date().timeIntervalSince(d))
+        guard s > 0 else { return "" }
+        let day = s / 86400, hour = (s % 86400) / 3600, minute = (s % 3600) / 60
+        if day > 0 { return "\(day)天\(hour)时" }
+        if hour > 0 { return "\(hour)时\(minute)分" }
+        return "\(minute)分"
+    }
+
+    nonisolated static func dbl(_ v: Any?) -> Double {
+        if let d = v as? Double { return d }
+        if let n = v as? NSNumber { return n.doubleValue }
+        if let s = v as? String { return Double(s) ?? 0 }
+        return 0
     }
 
     // MARK: 工具
