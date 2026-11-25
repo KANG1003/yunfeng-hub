@@ -56,6 +56,11 @@ struct WGProfile: Codable, Identifiable, Hashable {
     var mtu: Int = 1400
     var privateKey: String = ""
     var publicKey: String = ""
+
+    /// 有完整密钥才能导出给官方 App 导入
+    var isComplete: Bool {
+        !privateKey.isEmpty && !publicKey.isEmpty && !endpoint.isEmpty && !address.isEmpty
+    }
 }
 
 // MARK: - 全局 Store
@@ -120,6 +125,24 @@ final class AppStore {
 
     func addNav(name: String, host: String, url: String, symbol: String = "link") {
         navItems.append(NavItem(name: name, host: host, url: url, symbol: symbol))
+        save()
+    }
+
+    // MARK: WireGuard 配置
+
+    func addProfile(_ p: WGProfile) {
+        profiles.append(p)
+        save()
+    }
+
+    func deleteProfile(_ p: WGProfile) {
+        profiles.removeAll { $0.id == p.id }
+        save()
+    }
+
+    func updateProfile(_ p: WGProfile) {
+        guard let idx = profiles.firstIndex(where: { $0.id == p.id }) else { return }
+        profiles[idx] = p
         save()
     }
 

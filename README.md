@@ -101,7 +101,7 @@ open YunfengHub.xcodeproj
 | 写日报 | ✅ 可用 | 第 4 个 Tab，内嵌 http://rb.kangkang.me/login.php（原生日报视图保留在代码里，未挂 Tab） |
 | 仪电周结 | ✅ 可用 | 第 5 个 Tab，内嵌 http://we.kangkang.me/index.php |
 | 背景管理 | ✅ 可用 | 8 套渐变壁纸 + 相册自定义 + 模糊/色调/卡片透明度；入口在「导航」页右上角调色盘 |
-| WireGuard | ⚠️ 界面完成，隧道未接 | 见下文第四节 |
+| WireGuard | ✅ 配置管理可用 | 粘贴/导入 .conf → 分享给官方 WireGuard 导入；不在本机建隧道 |
 
 默认导航入口（首次启动写入，可在界面里改）：
 
@@ -117,25 +117,22 @@ open YunfengHub.xcodeproj
 
 App 显示名为 `yunfeng`，图标为深空渐变 + 山岳流云（`YunfengHub/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`，1024×1024 无透明通道）。
 
-## 四、WireGuard 要真拨号，还差三步
+## 四、WireGuard：变成「配置管理 + 交给官方 App」
 
-工程里 `WireGuardService` 已经把「配置解析 / 状态机 / 计时 / 流量展示」写好，`connect()` 里留了两处 `TODO`。真跑起来需要：
+本工程不再假装拨号。iOS 让第三方 App 自己建隧道，必须有：
 
-1. **引入 WireGuardKit**
-   Xcode → Package Dependencies → `https://github.com/WireGuard/wireguard-apple`
-   依赖指向 `WireGuardKit` 产品。
+1. 付费开发者账号（$99/年）
+2. NetworkExtension → Packet Tunnel 能力
+3. 单独的 Packet Tunnel Extension target + WireGuardKit
 
-2. **新建 Packet Tunnel Extension**
-   File → New → Target → Network Extension，类型选 Packet Tunnel。
-   把 `WireGuardKit` 的 `WireGuardProvider` 逻辑接到你自己的 `NEPacketTunnelProvider` 子类里，
-   配置通过 App Group（`group.com.yunfeng.hub`）传给扩展。
+万能签／免费证书签不出这个能力，所以本 App 只做配置这一层，隧道交给官方 **WireGuard** App（免费、支持 on-demand、更稳）：
 
-3. **开发者后台开能力**
-   - 主 App 与 Extension 两个 Bundle ID 都要勾 **Network Extensions → Packet Tunnel**
-   - 两个 ID 都要挂同一个 App Group
-   - Entitlements 里取消注释 `com.apple.developer.networking.networkextension`
+- **粘贴 .conf**：整段粘进去，自动解析 Endpoint / 私钥 / 对端公钥 / MTU / AllowedIPs
+- **从文件导入**：选 `.conf` 文件
+- **分享到 WireGuard**：生成标准 `.conf` 临时文件，走系统分享面板，选 WireGuard 即完成导入
+- **复制文本**：粘到 WireGuard App 里手动新建
 
-> 没有 $99 开发者账号时，只能用个人免费证书签名，**NetworkExtension 能力不可用**，隧道拨不起来——这是 Apple 的硬限制，绕不过去。
+校验：只有密钥齐全的配置才能导出，缺密钥会明确提示，不会生成半截配置。
 
 ## 五、其它已知限制
 

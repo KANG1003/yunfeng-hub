@@ -1,11 +1,10 @@
 //
 //  Services.swift
-//  日报引擎 / 周报引擎 / WireGuard / Sun-Panel
+//  日报引擎 / 周报引擎 / WireGuard 配置生成 / Sun-Panel
 //
 
 import Foundation
 import SwiftUI
-import NetworkExtension
 import Observation
 
 // MARK: - 日报生成
@@ -94,87 +93,29 @@ enum WeeklyEngine {
     }
 }
 
-// MARK: - WireGuard 服务
+// MARK: - WireGuard 配置
 //
-// 注意：iOS 上真正建立 WireGuard 隧道必须是三方协作：
-//   1. 引入 WireGuardKit（SPM：https://github.com/WireGuard/wireguard-apple）
-//   2. 新建 Packet Tunnel Extension target（NEPacketTunnelProvider 子类）
-//   3. 主 App 与 Extension 共享 App Group（group.com.yunfeng.hub）
-//   4. 开发者后台为两个 Bundle ID 同时开启 Network Extension (VPN) 能力
-//
-// 本文件把「配置解析 / 状态管理 / 上层 UI 接口」写好，
-// 真拨号只需把 connect() 里标注 TODO 的两处接上即可。
+// 本 App 不做隧道（iOS 建隧道必须 NetworkExtension + 付费开发者账号）。
+// 这里只负责：解析 .conf → 生成标准 .conf → 交给官方 WireGuard App 导入。
 
-@MainActor
-@Observable
-final class WireGuardService {
+enum WGConfig {
 
-    enum Status: String {
-        case disconnected = "未连接"
-        case connecting = "连接中"
-        case connected = "已连接"
-        case failed = "连接失败"
+    /// 生成可直接导入官方 WireGuard 的配置文件内容
+    static func render(_ p: WGProfile, keepalive: Int = 25) -> String {
+        var s = "[Interface]\n"
+        s += "PrivateKey = \(p.privateKey)\n"
+        s += "Address = \(p.address)\n"
+        if p.mtu > 0 { s += "MTU = \(p.mtu)\n" }
+        s += "\n[Peer]\n"
+        s += "PublicKey = \(p.publicKey)\n"
+        s += "Endpoint = \(p.endpoint)\n"
+        s += "AllowedIPs = \(p.allowedIPs)\n"
+        s += "PersistentKeepalive = \(keepalive)\n"
+        return s
     }
 
-    var status: Status = .disconnected
-    var startedAt: Date?
-    var downlink: Double = 0
-    var uplink: Double = 0
-
-    private var timer: Timer?
-    private var manager: NEVPNManager?
-
-    var isOn: Bool { status == .connected }
-
-    var uptimeText: String {
-        guard let startedAt else { return "00:00" }
-        let sec = Int(Date().timeIntervalSince(startedAt))
-        return String(format: "%02d:%02d", sec / 60, sec % 60)
-    }
-
-    func toggle(profile: WGProfile?) {
-        if isOn { disconnect() } else { connect(profile: profile) }
-    }
-
-    func connect(profile: WGProfile?) {
-        guard let profile else { return }
-        status = .connecting
-
-        // TODO: ① 用 WireGuardKit 生成 TunnelConfiguration 并写入 App Group
-        // TODO: ② 通过 NETunnelProviderManager 启动 PacketTunnelProvider
-
-        // 演示态：300ms 后置为已连接，真实工程请删掉这段
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            self.status = .connected
-            self.startedAt = .now
-            self.startMetering()
-        }
-        _ = profile
-    }
-
-    func disconnect() {
-        timer?.invalidate(); timer = nil
-        status = .disconnected
-        startedAt = nil
-        downlink = 0; uplink = 0
-        // TODO: manager?.connection.stopVPNTunnel()
-    }
-
-    private func startMetering() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.downlink = 85 + Double.random(in: 0...20)
-                self.uplink = 18 + Double.random(in: 0...8)
-            }
-        }
-    }
-
-    // MARK: 解析 .conf
-
-    static func parse(conf text: String, name: String) -> WGProfile? {
+    /// 解析 .conf 文本
+    static func parse(_ text: String, name: String) -> WGProfile? {
         var p = WGProfile(name: name, endpoint: "", address: "", allowedIPs: "")
         var inInterface = false
         for raw in text.split(separator: "\n") {
@@ -200,6 +141,12 @@ final class WireGuardService {
         }
         return p.endpoint.isEmpty ? nil : p
     }
+
+    /// 密钥脱敏显示
+    static func mask(_ key: String) -> String {
+        guard key.count > 12 else { return key.isEmpty ? "未配置" : key }
+        return String(key.prefix(6)) + "…" + String(key.suffix(4))
+    }
 }
 
 // MARK: - Sun-Panel
@@ -207,7 +154,7 @@ final class WireGuardService {
 @MainActor
 @Observable
 final class SunPanelService {
-    var urlString: String = "http://192.168.10.69:3000"
+    var urlString: String = "http://sp.kangkang.me"
     var isReachable: Bool = true
 
     var url: URL? { URL(string: urlString) }
