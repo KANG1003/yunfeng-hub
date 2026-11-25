@@ -41,9 +41,9 @@ struct RootView: View {
                 .tabItem { Label("导航", systemImage: "safari") }
 
                 NavigationStack {
-                    VPNView()
+                    TerminalView()
                 }
-                .tabItem { Label("VPN", systemImage: "shield.lefthalf.filled") }
+                .tabItem { Label("终端", systemImage: "wifi.router") }
 
                 NavigationStack {
                     WebPanelView(title: "备件系统",

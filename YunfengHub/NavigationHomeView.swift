@@ -14,6 +14,7 @@ struct NavigationHomeView: View {
     @State private var opened: NavItem?
     @State private var showAdd = false
     @State private var showBackground = false
+    @State private var showVPN = false
     @State private var newName = ""
     @State private var newLAN = ""
     @State private var newWAN = ""
@@ -64,6 +65,16 @@ struct NavigationHomeView: View {
             }
         }
         .sheet(isPresented: $showAdd) { addSheet }
+        .sheet(isPresented: $showVPN) {
+            NavigationStack {
+                VPNView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("关闭") { showVPN = false }
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: 顶栏：网络模式 + 数量
@@ -94,6 +105,15 @@ struct NavigationHomeView: View {
             Text("\(store.navItems.count) 个入口")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
+
+            Button { showVPN = true } label: {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.system(size: 12.5))
+                    .frame(width: 30, height: 30)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
         }
         .padding(.top, 6)
     }

@@ -33,7 +33,7 @@ targets:
           - UIInterfaceOrientationPortrait
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        NSLocalNetworkUsageDescription: 需要访问局域网内的 Home Assistant、NAS、Sun-Panel 等服务
+        NSLocalNetworkUsageDescription: 需要访问局域网内的爱快路由、Home Assistant、NAS、Sun-Panel 等服务
         # 自建站点都是 http，不放开 ATS 会白屏
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
